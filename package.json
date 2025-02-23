@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "dotenv": "^16.4.7",
+    "ethers": "^5.7.2",
+    "rlp": "^3.0.0",
+    "web3": "^4.16.0"
+  },
+  "name": "moon_rollup2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
