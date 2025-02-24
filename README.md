@@ -19,6 +19,7 @@ Sepolia Network Rollup System and Sequencer
   - Timestamp
   - Batch Index
   - State Root
+- Batch Data는 sequencer 로컬에 파일로 저장되어 추후 조회 및 수정 가능
 
 ### 검증 시스템
 - 새로운 Batch는 초기에 'Unfinalized' 상태로 등록
