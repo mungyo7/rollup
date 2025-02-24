@@ -1,14 +1,35 @@
 # RollUp 🔄
-## Sepolia Network Rollup Implementation
 
-### 주요 기능
-- Sepolia 네트워크에서 작동
-- 설정한 A, B 지갑에서 트랜잭션 발생시 감지
-- 트랜잭션 정보를 sequencer에 추가
-- Sequencer에 3개의 트랜잭션이 쌓이면 배치 생성
-- 롤업 컨트랙트로 해시화해서 전송
+Sepolia Network Rollup System and Sequencer
 
-### 추가할 것
-- 배치 state root 방식(실제 옵티미즘 롤업 방식)
-- 챌린지 기능
-- 롤업 컨트랙트에서 배치 데이터 받아와서 역해시화해서 확인
+## 개요
+이 프로젝트는 이더리움의 Sepolia 테스트넷에서 동작하는 롤업 시스템을 구현합니다. 트랜잭션의 배치 처리와 챌린지 기반의 검증 시스템을 포함합니다.
+
+## 주요 기능
+
+### 트랜잭션 처리
+- 지정된 A, B 지갑의 트랜잭션 모니터링 및 발생 감지
+- Sequencer를 통한 트랜잭션 수집 및 관리
+- 3개의 트랜잭션 단위로 Batch 생성
+
+### 롤업 메커니즘
+- Batch Data 해시화 및 롤업 컨트랙트 전송
+- 각 Batch는 다음 정보를 포함:
+  - Transaction Data
+  - Timestamp
+  - Batch Index
+  - State Root
+
+### 검증 시스템
+- 새로운 Batch는 초기에 'Unfinalized' 상태로 등록
+- 챌린지 기간을 통한 유효성 검증
+- 챌린지 기간 이후 'Finalized' 상태로 전환
+
+### 챌린지 메커니즘
+- 챌린지 기간 내 사기 증명 트랜잭션 검증
+- 부정 트랜잭션 발견 시:
+  - Unfinalized 상태의 Batch 중 해당 트랜잭션을 찾아 Batch 내 해당 트랜잭션 이후의 모든 트랜잭션 제거
+  - 새로운 State Root 계산
+  - 수정된 Batch로 교체
+
+

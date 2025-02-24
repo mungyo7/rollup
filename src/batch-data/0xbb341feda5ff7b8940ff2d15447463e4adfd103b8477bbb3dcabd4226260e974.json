@@ -1,0 +1,31 @@
+{
+  "originalData": [
+    {
+      "txhash": "0x7e38a61dede531caef8a4b2b15357c1357302cc95cedd63165ae09a1de1e6c75",
+      "sender": "0x91531Da8B72049038f911AD82c8A8540797d9792",
+      "recipient": "0xdc89956AC4ac8e9A77f657131B6f4e309E3f7E32",
+      "amount": "12300000000000000",
+      "nonce": "7775863",
+      "timestamp": "1740401628"
+    },
+    {
+      "txhash": "0x58ea6f3a5ef688805663bba7562014fbeb1d26db8895d4e6905f94ec0b8f453c",
+      "sender": "0x2643Fe1e5Fb3fDB1D0004B78Fd91209A28904A18",
+      "recipient": "0x91531Da8B72049038f911AD82c8A8540797d9792",
+      "amount": "200000000000000000",
+      "nonce": "7775864",
+      "timestamp": "1740401640"
+    },
+    {
+      "txhash": "0xa3863615945e33ff8e2d0e1339ee9dc44c3ee90f5cd5b30c14f7bed63ec1bce5",
+      "sender": "0x2643Fe1e5Fb3fDB1D0004B78Fd91209A28904A18",
+      "recipient": "0x91531Da8B72049038f911AD82c8A8540797d9792",
+      "amount": "10000000000000000",
+      "nonce": "7775865",
+      "timestamp": "1740401652"
+    }
+  ],
+  "timestamp": 1740401669094,
+  "batchIndex": 2,
+  "finalized": false
+}
