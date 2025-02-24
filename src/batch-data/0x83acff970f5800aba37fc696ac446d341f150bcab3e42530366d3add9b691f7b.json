@@ -1,0 +1,17 @@
+{
+  "originalData": [
+    {
+      "txhash": "0xe19c566a580ab99b8accf04c4c8aba17588d7b9c2b38144f63fbc1eadf07ebb9",
+      "sender": "0x91531Da8B72049038f911AD82c8A8540797d9792",
+      "recipient": "0x2643Fe1e5Fb3fDB1D0004B78Fd91209A28904A18",
+      "amount": "1000000000000000",
+      "nonce": "7774581",
+      "timestamp": "1740385788"
+    }
+  ],
+  "timestamp": 1740385803177,
+  "fraudProofApplied": true,
+  "originalStateRoot": "0x96247bf228d488f209e9449a17869f14f2e34cd407d8453228ee542bdb5a516e",
+  "fraudulentTxHash": "0xa25036f1461aa98655d547387ac733d69647b412a84cdd8cc26132e70c02d9c6",
+  "modificationTime": 1740385819239
+}

@@ -1,5 +1,7 @@
 require('dotenv').config();
 const { ethers } = require('ethers');
+const fs = require('fs');
+const path = require('path');
 
 // A, B 지갑 주소
 const WATCHED_ADDRESSES = [
@@ -23,9 +25,15 @@ const sequencerWallet = new ethers.Wallet(
     provider
 );
 
+// 환경 변수 확인
+if (!process.env.ROLLUP_CONTRACT_ADDRESS) {
+  throw new Error('ROLLUP_CONTRACT_ADDRESS is not defined in .env file');
+}
+
 // 3. 배포된 롤업 컨트랙트 인스턴스 가져오기
 const rollupAbi = [
   'function submitBatch(bytes32 _compressedData) external',
+  'event BatchSubmitted(bytes32 indexed stateRoot, address indexed submitter, bytes batchData)',
 ];
 const rollupContract = new ethers.Contract(
   process.env.ROLLUP_CONTRACT_ADDRESS,
@@ -59,6 +67,7 @@ let pendingTxs = [];
 
 // 5. 새로운 블록이 생길 때마다, 혹은 필터를 통해 트랜잭션 감지
 //    여기서는 예시로, 블록마다 해당 주소들로부터의 트랜잭션을 필터링하는 방식을 가정
+
 provider.on('block', async (blockNumber) => {
   console.log(`\n[Sequencer] New block: ${blockNumber}`);
   
@@ -92,7 +101,7 @@ provider.on('block', async (blockNumber) => {
         block.timestamp
       );
       pendingTxs.push(transaction);
-      console.log(pendingTxs);
+      
       // 3개가 모이면 batch로 압축 후 L1으로 전송
       if (pendingTxs.length >= 3) {
         await submitBatchToL1(pendingTxs.splice(0, 3)); // 앞에서 3개만 추출
@@ -101,31 +110,166 @@ provider.on('block', async (blockNumber) => {
   }
 });
 
+// 배치 데이터 저장 경로 설정
+const BATCH_DATA_DIR = path.join(__dirname, 'batch-data');
+if (!fs.existsSync(BATCH_DATA_DIR)) {
+  fs.mkdirSync(BATCH_DATA_DIR);
+}
+
 // 6. batch 제출 함수
 async function submitBatchToL1(batchTxs) {
   console.log('\n[Sequencer] Submitting batch to L1...');
   console.log('Batch Txs:', batchTxs);
 
-  // 구조화된 데이터를 RLP 인코딩 형식으로 변환
-  const encodedData = batchTxs.map(tx => ({
+  // 상태 업데이트 데이터 구성
+  const stateUpdates = batchTxs.map(tx => ({
     txhash: tx.txhash,
-    blocknumber: tx.blocknumber.toString(),
-    from: tx.from,
-    to: tx.to,
-    value: tx.value.toString(),
-    data: tx.data,
+    sender: tx.from,
+    recipient: tx.to,
+    amount: tx.value.toString(),
+    nonce: tx.blocknumber.toString(),
     timestamp: tx.timestamp.toString()
   }));
 
-  // 인코딩된 데이터를 JSON 문자열로 변환 후 해싱
-  const compressedData = ethers.utils.keccak256(
-    ethers.utils.toUtf8Bytes(JSON.stringify(encodedData))
+  // 원본 데이터를 JSON으로 직렬화
+  const batchData = ethers.utils.defaultAbiCoder.encode(
+    ['tuple(bytes32 txhash, address sender, address recipient, string amount, string nonce, string timestamp)[]'],
+    [stateUpdates]
   );
 
+  const leaves = stateUpdates.map(update => 
+    ethers.utils.solidityKeccak256(
+      ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
+      [update.txhash, update.sender, update.recipient, update.amount, update.nonce, update.timestamp]
+    )
+  );
+
+  const batchStateRoot = ethers.utils.solidityKeccak256(
+    ['bytes32[]'],
+    [leaves]
+  );
+
+  // 배치 데이터를 파일로 저장
+  const batchDataObj = {
+    originalData: stateUpdates,
+    timestamp: Date.now()
+  };
+  
+  const batchFilePath = path.join(BATCH_DATA_DIR, `${batchStateRoot}.json`);
+  fs.writeFileSync(batchFilePath, JSON.stringify(batchDataObj, null, 2));
+
   // Rollup 컨트랙트에 배치 제출
-  const tx = await rollupContract.submitBatch(compressedData);
+  const tx = await rollupContract.submitBatch(batchStateRoot);
+  console.log('[Sequencer] StateRoot:', batchStateRoot);
   console.log(`[Sequencer] Waiting for L1 confirmation... (tx: ${tx.hash})`);
 
   const receipt = await tx.wait();
   console.log('[Sequencer] Batch submitted! Gas used:', receipt.gasUsed.toString());
+
+  // BatchSubmitted 이벤트 리스닝
+  const event = await receipt.events.find(e => e.event === 'BatchSubmitted');
+  if (event) {
+    console.log('\n[Sequencer] Batch data retrieval:');
+    await getBatchDataByStateRoot(event.args.stateRoot);
+  }
 }
+
+// state root로 배치 데이터 조회 함수
+async function getBatchDataByStateRoot(stateRoot) {
+  const batchFilePath = path.join(BATCH_DATA_DIR, `${stateRoot}.json`);
+  
+  try {
+    const data = JSON.parse(fs.readFileSync(batchFilePath, 'utf8'));
+    console.log('\n[Sequencer] Found batch data for state root:', stateRoot);
+    console.log('Original Transactions:', data.originalData);
+    console.log('Submission Time:', new Date(data.timestamp).toLocaleString());
+  } catch (error) {
+    console.log('\n[Sequencer] No batch data found for state root:', stateRoot);
+  }
+}
+
+// 사기 증명된 트랜잭션 처리 함수
+async function handleFraudProof(fraudulentTxHash) {
+  console.log('\n[Fraud Proof] Processing fraud proof for transaction:', fraudulentTxHash);
+  
+  // batch-data 디렉토리의 모든 파일 검사
+  const files = fs.readdirSync(BATCH_DATA_DIR);
+  let fraudBatchFound = false;
+
+  for (const file of files) {
+    const batchFilePath = path.join(BATCH_DATA_DIR, file);
+    const batchData = JSON.parse(fs.readFileSync(batchFilePath, 'utf8'));
+    
+    // 배치 내에서 사기 증명된 트랜잭션 찾기
+    const fraudTxIndex = batchData.originalData.findIndex(tx => 
+      tx.txhash.toLowerCase() === fraudulentTxHash.toLowerCase()
+    );
+
+    if (fraudTxIndex !== -1) {
+      fraudBatchFound = true;
+      console.log('[Fraud Proof] Found fraudulent transaction in batch:', file);
+      
+      // 사기 트랜잭션 이후의 모든 트랜잭션 제거
+      batchData.originalData = batchData.originalData.slice(0, fraudTxIndex);
+      
+      if (batchData.originalData.length === 0) {
+        // 배치의 모든 트랜잭션이 무효화된 경우 파일 삭제
+        fs.unlinkSync(batchFilePath);
+        console.log('[Fraud Proof] Batch completely invalidated and removed');
+      } else {
+        // 수정된 배치 데이터 저장
+        // 새로운 상태 루트 계산
+        const leaves = batchData.originalData.map(update => 
+          ethers.utils.solidityKeccak256(
+            ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
+            [update.txhash, update.sender, update.recipient, update.amount, update.nonce, update.timestamp]
+          )
+        );
+
+        const newBatchStateRoot = ethers.utils.solidityKeccak256(
+          ['bytes32[]'],
+          [leaves]
+        );
+
+        // 새 파일에 저장하고 이전 파일 삭제
+        const newBatchFilePath = path.join(BATCH_DATA_DIR, `${newBatchStateRoot}.json`);
+        fs.writeFileSync(newBatchFilePath, JSON.stringify({
+          ...batchData,
+          fraudProofApplied: true,
+          originalStateRoot: file.replace('.json', ''),
+          fraudulentTxHash: fraudulentTxHash,
+          modificationTime: Date.now()
+        }, null, 2));
+        
+        fs.unlinkSync(batchFilePath);
+        console.log('[Fraud Proof] Batch updated with new state root:', newBatchStateRoot);
+      }
+      break;
+    }
+  }
+
+  if (!fraudBatchFound) {
+    console.log('[Fraud Proof] Transaction not found in any batch');
+  }
+}
+
+// CLI 명령어 처리 부분 수정
+process.stdin.on('data', async (data) => {
+  const input = data.toString().trim();
+  if (input.startsWith('get ')) {
+    const stateRoot = input.slice(4).trim();
+    await getBatchDataByStateRoot(stateRoot);
+  } else if (input.startsWith('fraud ')) {
+    const txHash = input.slice(6).trim();
+    await handleFraudProof(txHash);
+  } else if (input === 'exit') {
+    console.log('프로그램을 종료합니다...');
+    process.exit();
+  }
+});
+
+// 시작 메시지 수정
+console.log('시퀀서가 시작되었습니다. 새로운 블록을 모니터링합니다...');
+console.log('배치 데이터 조회: "get [state root]" 입력');
+console.log('사기 증명 처리: "fraud [transaction hash]" 입력');
+console.log('프로그램 종료: "exit" 입력');
